@@ -25,6 +25,7 @@ stages {
             java -version
             mvn -version
             docker --version
+            trivy version || true
             '''
         }
     }
@@ -91,6 +92,14 @@ stages {
         }
     }
 
+    // 🔥 TRIVY STAGE ADDED HERE
+    stage('Stage VII: Scan Image ') {
+        steps { 
+            echo "Scanning Image for Vulnerabilities"
+            sh "trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:latest > trivyresults.txt"
+        }
+    }
+
     stage('Push Docker Image') {
         steps {
             script {
@@ -137,5 +146,4 @@ post {
         cleanWs()
     }
 }
-
 }
