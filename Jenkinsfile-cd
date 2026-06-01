@@ -1,65 +1,69 @@
 pipeline {
-agent { label 'build' }
+    agent { label 'build' }
 
-parameters {
-    string(
-        name: 'IMAGETAG',
-        defaultValue: 'latest',
-        description: 'Docker image tag to deploy'
-    )
-
-    choice(
-        name: 'environment',
-        choices: ['functional', 'integration', 'regression', 'uat', 'release'],
-        description: 'Select deployment environment'
-    )
-}
-
-stages {
-
-    stage('Checkout Deployment Repo') {
-        steps {
-            git branch: 'master',
-                credentialsId: 'GITLABCRED',
-                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
-        }
+    parameters {
+        string(
+            name: 'IMAGETAG',
+            defaultValue: 'latest',
+            description: 'Docker image tag to deploy'
+        )
     }
 
-    stage('Update Kubernetes Manifest') {
-        steps {
-            dir("./${params.environment}") {
+    stages {
 
+        stage('Checkout Deployment Repo') {
+            steps {
+                git branch: 'master',
+                    credentialsId: 'GITLABCRED',
+                    url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
+            }
+        }
+
+        stage('Verify Files') {
+            steps {
+                sh '''
+                pwd
+                ls -la
+                '''
+            }
+        }
+
+        stage('Update Kubernetes Manifest') {
+            steps {
                 sh """
-                sed -i 's|image:.*|image: vijaykumarkotikilapudi/springboot-demo:${IMAGETAG}|g' deployment.yml
+                sed -i 's|image:.*|image: vijaykumarkotikilapudi/springboot-demo:${params.IMAGETAG}|g' deployment.yml
                 """
 
-                sh "cat deployment.yml"
+                sh '''
+                echo "Updated deployment.yml"
+                cat deployment.yml
+                '''
+            }
+        }
+
+        stage('Commit and Push Changes') {
+            steps {
+                sh '''
+                git config user.email "vijaykdevops1997@gmail.com"
+                git config user.name "vijaykdevops1997"
+
+                git add deployment.yml
+
+                git commit -m "Deploy image tag ${IMAGETAG}" || true
+
+                git push origin master
+                '''
             }
         }
     }
 
-    stage('Commit and Push Changes') {
-        steps {
-            sh """
-            git config user.email "vijaykdevops1997@gmail.com"
-            git config user.name "vijaykdevops1997"
+    post {
+        success {
+            echo "Deployment manifest updated successfully"
+        }
 
-            git add .
-            git commit -m "Deploy image tag ${IMAGETAG}" || true
-            git push origin master
-            """
+        failure {
+            echo "Deployment manifest update failed"
         }
     }
-}
-
-post {
-    success {
-        echo "Deployment manifest updated successfully"
-    }
-
-    failure {
-        echo "Deployment manifest update failed"
-    }
-}
-
 }
