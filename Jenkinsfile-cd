@@ -7,18 +7,6 @@ pipeline {
             defaultValue: 'latest',
             description: 'Docker image tag'
         )
-
-        string(
-            name: 'GIT_USER',
-            defaultValue: 'venkatarajukotikilapudi1963',
-            description: 'GitLab Username'
-        )
-
-        password(
-            name: 'GIT_PASS',
-            defaultValue: '',
-            description: 'GitLab Personal Access Token'
-        )
     }
 
     stages {
@@ -44,17 +32,18 @@ pipeline {
 
         stage('Commit and Push Changes') {
             steps {
-                sh '''
-                git config user.email "vijaykdevops1997@gmail.com"
-                git config user.name "vijaykdevops1997"
+                withCredentials([usernamePassword(credentialsId: 'GITLABCRED', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                    sh '''
+                    git config user.email "vijaykdevops1997@gmail.com"
+                    git config user.name "vijaykdevops1997"
 
-                git add .
-                git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
+                    git add .
+                    git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
 
-                git remote set-url origin https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git
-
-                git push origin master
-                '''
+                    git remote set-url origin https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git
+                    git push origin master
+                    '''
+                }
             }
         }
     }
