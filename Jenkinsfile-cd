@@ -5,7 +5,7 @@ pipeline {
         string(
             name: 'IMAGETAG',
             defaultValue: 'latest',
-            description: 'Docker image tag to deploy'
+            description: 'Docker image tag'
         )
     }
 
@@ -19,24 +19,12 @@ pipeline {
             }
         }
 
-        stage('Verify Workspace') {
-            steps {
-                sh '''
-                echo "Workspace structure:"
-                pwd
-                ls -R kubernetes
-                '''
-            }
-        }
-
         stage('Update Kubernetes Manifest') {
             steps {
                 dir('kubernetes') {
                     sh """
                     sed -i 's|image:.*|image: vijaykumarkotikilapudi/springboot-demo:${IMAGETAG}|g' deployment.yml
                     """
-
-                    sh "cat deployment.yml"
                 }
             }
         }
@@ -57,8 +45,6 @@ pipeline {
                     git add kubernetes/deployment.yml
                     git commit -m "Deploy image tag ${IMAGETAG}" || true
 
-                    git remote set-url origin https://gitlab.com/venkatarajukotikilapudi/springboot.git
-
                     git push https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git HEAD:master
                     '''
                 }
@@ -68,15 +54,11 @@ pipeline {
 
     post {
         success {
-            echo "Deployment manifest updated successfully"
+            echo "SUCCESS"
         }
 
         failure {
-            echo "Pipeline failed"
-        }
-
-        always {
-            cleanWs()
+            echo "FAILED"
         }
     }
 }
