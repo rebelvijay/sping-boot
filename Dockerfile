@@ -1,14 +1,11 @@
-# Use official OpenJDK runtime
-FROM eclipse-temurin:21-jdk
-
-# Set working directory inside container
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
+COPY . .
+RUN mvn clean package -DskipTests
 
-# Copy the built JAR file from target folder
-COPY target/*.jar app.jar
+FROM eclipse-temurin:21-jdk
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 
-# Expose application port
 EXPOSE 8081
-
-# Run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
