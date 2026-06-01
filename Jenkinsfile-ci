@@ -4,11 +4,13 @@ pipeline {
     environment {
         JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
         PATH = "${JAVA_HOME}/bin:${PATH}"
+
         IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
         registryCredential = "dockerhub"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 git branch: 'master',
@@ -17,22 +19,53 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        stage('Verify Environment') {
             steps {
-                sh 'mvn clean compile test'
+                sh '''
+                java -version
+                mvn -version
+                docker --version
+                trivy version || true
+                '''
             }
         }
 
-        stage('Code Coverage') {
+        stage('Clean Build') {
             steps {
+                echo "Compiling application..."
+                sh 'mvn clean compile'
+            }
+        }
+
+        stage('Unit Test') {
+            steps {
+                echo "Running JUnit tests..."
+                sh 'mvn test'
+            }
+        }
+
+        stage('Code Coverage (JaCoCo)') {
+            steps {
+                echo "Generating JaCoCo report..."
                 sh 'mvn jacoco:report'
+            }
+        }
+
+        stage('Package Jar') {
+            steps {
+                echo "Building executable JAR..."
+                sh 'mvn package -DskipTests'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    sh 'mvn sonar:sonar -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml'
+                    sh '''
+                    mvn sonar:sonar \
+                    -Dsonar.projectName=springboot-demo \
+                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
                 }
             }
         }
@@ -42,19 +75,12 @@ pipeline {
                 timeout(time: 2, unit: 'MINUTES') {
                     script {
                         def qg = waitForQualityGate()
+
                         if (qg.status != 'OK') {
                             error "Pipeline aborted due to Quality Gate failure: ${qg.status}"
                         }
                     }
                 }
-            }
-        }
-
-        stage('Package Jar') {
-            steps {
-                sh 'mvn clean package -DskipTests'
-                // ✅ Debug check: list contents of target folder
-                sh 'ls -lh target/'
             }
         }
 
@@ -66,18 +92,25 @@ pipeline {
             }
         }
 
-        stage('Scan Image') {
+        stage('Scan Image (Trivy)') {
             steps {
-                sh "trivy image --scanners vuln --severity HIGH,CRITICAL ${IMAGE_NAME}:${BUILD_NUMBER} > trivyresults.txt"
+                echo "Scanning Image for Vulnerabilities"
+                sh """
+                trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${IMAGE_NAME}:${BUILD_NUMBER} > trivyresults.txt
+                """
             }
         }
 
         stage('Push Docker Image') {
             steps {
                 script {
-                    docker.withRegistry('', registryCredential) {
+                    docker.withRegistry('https://index.docker.io/v1/', registryCredential) {
                         def image = docker.image("${IMAGE_NAME}:${BUILD_NUMBER}")
-                        image.push()
+                        image.push("${BUILD_NUMBER}")
                     }
                 }
             }
@@ -87,9 +120,16 @@ pipeline {
             steps {
                 sh """
                 docker rm -f springboot-app || true
-                docker run -d --name springboot-app -p 8081:8081 ${IMAGE_NAME}:${BUILD_NUMBER}
+
+                docker run -d \
+                  --name springboot-app \
+                  -p 8081:8081 \
+                  ${IMAGE_NAME}:${BUILD_NUMBER}
+
                 sleep 20
+
                 curl http://localhost:8081
+
                 docker stop springboot-app
                 docker rm -f springboot-app
                 """
@@ -98,8 +138,16 @@ pipeline {
     }
 
     post {
-        success { echo 'CI Pipeline SUCCESS' }
-        failure { echo 'CI Pipeline FAILED' }
-        always { cleanWs() }
+        success {
+            echo 'Pipeline SUCCESS'
+        }
+
+        failure {
+            echo 'Pipeline FAILED'
+        }
+
+        always {
+            cleanWs()
+        }
     }
 }
