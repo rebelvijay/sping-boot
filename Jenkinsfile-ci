@@ -17,17 +17,6 @@ pipeline {
             }
         }
 
-        stage('Verify Environment') {
-            steps {
-                sh '''
-                java -version
-                mvn -version
-                docker --version
-                trivy version || true
-                '''
-            }
-        }
-
         stage('Build & Test') {
             steps {
                 sh 'mvn clean compile test'
@@ -61,10 +50,17 @@ pipeline {
             }
         }
 
+        stage('Package Jar') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+                // ✅ Debug check: list contents of target folder
+                sh 'ls -lh target/'
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
-                    // ✅ JAR name is now consistent (springboot-demo.jar)
                     docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
                 }
             }
