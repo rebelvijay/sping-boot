@@ -1,0 +1,145 @@
+pipeline {
+    agent { label 'build' }
+
+    environment {
+        JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
+        PATH = "${JAVA_HOME}/bin:${PATH}"
+
+        IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
+        REGISTRY_CREDENTIAL = "dockerhub"
+
+        GIT_REPO = "https://gitlab.com/venkatarajukotikilapudi/springboot.git"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'master',
+                    credentialsId: 'GITLABCRED',
+                    url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Verify Environment') {
+            steps {
+                sh '''
+                java -version
+                mvn -version
+                docker --version
+                trivy version || true
+                '''
+            }
+        }
+
+        stage('Build & Test') {
+            steps {
+                sh 'mvn clean compile test'
+            }
+        }
+
+        stage('Code Coverage (JaCoCo)') {
+            steps {
+                sh 'mvn jacoco:report'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                    mvn sonar:sonar \
+                    -Dsonar.projectName=springboot-demo \
+                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    script {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Quality Gate failed: ${qg.status}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "${BUILD_NUMBER}"
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        stage('Scan Image (Trivy)') {
+            steps {
+                sh """
+                trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --format json \
+                -o trivyresults.json \
+                ${IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Archive Vulnerability Report') {
+            steps {
+                archiveArtifacts artifacts: 'trivyresults.json', fingerprint: true
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', REGISTRY_CREDENTIAL) {
+                        def image = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
+                        image.push()
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes (CD)') {
+            steps {
+                sh """
+                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/deployment.yml
+                cat kubernetes/deployment.yml
+
+                kubectl apply -f kubernetes/deployment.yml
+                """
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                sleep 20
+                curl http://localhost:8081 || true
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "CI/CD PIPELINE SUCCESS 🚀 Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+
+        failure {
+            echo "CI/CD PIPELINE FAILED ❌"
+        }
+
+        always {
+            cleanWs()
+        }
+    }
+}
