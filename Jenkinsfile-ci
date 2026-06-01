@@ -1,149 +1,109 @@
 pipeline {
-agent { label 'build' }
+    agent { label 'build' }
 
-environment {
-    JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
-    PATH = "${JAVA_HOME}/bin:${PATH}"
-
-    IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
-    registryCredential = "dockerhub"
-}
-
-stages {
-
-    stage('Checkout') {
-        steps {
-            git branch: 'master',
-                credentialsId: 'GITLABCRED',
-                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
-        }
+    environment {
+        JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
+        PATH = "${JAVA_HOME}/bin:${PATH}"
+        IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
+        registryCredential = "dockerhub"
     }
 
-    stage('Verify Environment') {
-        steps {
-            sh '''
-            java -version
-            mvn -version
-            docker --version
-            trivy version || true
-            '''
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'master',
+                    credentialsId: 'GITLABCRED',
+                    url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
+            }
         }
-    }
 
-    stage('Clean Build') {
-        steps {
-            echo "Compiling application..."
-            sh 'mvn clean compile'
-        }
-    }
-
-    stage('Unit Test') {
-        steps {
-            echo "Running JUnit tests..."
-            sh 'mvn test'
-        }
-    }
-
-    stage('Code Coverage (JaCoCo)') {
-        steps {
-            echo "Generating JaCoCo report..."
-            sh 'mvn jacoco:report'
-        }
-    }
-
-    stage('Package Jar') {
-        steps {
-            echo "Building executable JAR..."
-            sh 'mvn package -DskipTests'
-        }
-    }
-
-    stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('sonarqube') {
+        stage('Verify Environment') {
+            steps {
                 sh '''
-                mvn sonar:sonar \
-                -Dsonar.projectName=springboot-demo \
-                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                java -version
+                mvn -version
+                docker --version
+                trivy version || true
                 '''
             }
         }
-    }
 
-    stage('Quality Gate') {
-        steps {
-            timeout(time: 2, unit: 'MINUTES') {
-                script {
-                    def qg = waitForQualityGate()
+        stage('Build & Test') {
+            steps {
+                sh 'mvn clean compile test'
+            }
+        }
 
-                    if (qg.status != 'OK') {
-                        error "Pipeline aborted due to Quality Gate failure: ${qg.status}"
+        stage('Code Coverage') {
+            steps {
+                sh 'mvn jacoco:report'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh 'mvn sonar:sonar -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml'
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    script {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline aborted due to Quality Gate failure: ${qg.status}"
+                        }
                     }
                 }
             }
         }
-    }
 
-    stage('Build Docker Image') {
-        steps {
-            script {
-                docker.build("${IMAGE_NAME}:latest")
-            }
-        }
-    }
-
-    // 🔥 TRIVY STAGE ADDED HERE
-    stage('Stage VII: Scan Image ') {
-        steps { 
-            echo "Scanning Image for Vulnerabilities"
-            sh "trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:latest > trivyresults.txt"
-        }
-    }
-
-    stage('Push Docker Image') {
-        steps {
-            script {
-                docker.withRegistry('', registryCredential) {
-                    def image = docker.image("${IMAGE_NAME}:latest")
-                    image.push('latest')
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // ✅ JAR name is now consistent (springboot-demo.jar)
+                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
                 }
             }
         }
-    }
 
-    stage('Smoke Test') {
-        steps {
-            sh '''
-            docker rm -f springboot-app || true
+        stage('Scan Image') {
+            steps {
+                sh "trivy image --scanners vuln --severity HIGH,CRITICAL ${IMAGE_NAME}:${BUILD_NUMBER} > trivyresults.txt"
+            }
+        }
 
-            docker run -d \
-              --name springboot-app \
-              -p 8081:8081 \
-              ${IMAGE_NAME}:latest
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('', registryCredential) {
+                        def image = docker.image("${IMAGE_NAME}:${BUILD_NUMBER}")
+                        image.push()
+                    }
+                }
+            }
+        }
 
-            sleep 20
-
-            curl http://localhost:8081
-
-            docker stop springboot-app
-            docker rm -f springboot-app
-            '''
+        stage('Smoke Test') {
+            steps {
+                sh """
+                docker rm -f springboot-app || true
+                docker run -d --name springboot-app -p 8081:8081 ${IMAGE_NAME}:${BUILD_NUMBER}
+                sleep 20
+                curl http://localhost:8081
+                docker stop springboot-app
+                docker rm -f springboot-app
+                """
+            }
         }
     }
-}
 
-post {
-
-    success {
-        echo 'Pipeline SUCCESS'
+    post {
+        success { echo 'CI Pipeline SUCCESS' }
+        failure { echo 'CI Pipeline FAILED' }
+        always { cleanWs() }
     }
-
-    failure {
-        echo 'Pipeline FAILED'
-    }
-
-    always {
-        cleanWs()
-    }
-}
 }
