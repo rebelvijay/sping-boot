@@ -5,7 +5,7 @@ FROM eclipse-temurin:21-jdk
 WORKDIR /app
 
 # Copy the built JAR file from target folder
-COPY target/springboot-demo-1.0.0.jar app.jar
+COPY target/*.jar app.jar
 
 # Expose application port
 EXPOSE 8081
