@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: springboot-demo
-        image: vijaykumarkotikilapudi/springboot-demo:latest
+        image: vijaykumarkotikilapudi/springboot-demo:26
         imagePullPolicy: Always
 
         ports:
