@@ -4,7 +4,9 @@ agent { label 'build' }
 environment {
     JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
     PATH = "${JAVA_HOME}/bin:${PATH}"
-    IMAGE_NAME = "springboot-demo"
+
+    IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
+    registryCredential = "dockerhub"
 }
 
 stages {
@@ -22,6 +24,7 @@ stages {
             sh '''
             java -version
             mvn -version
+            docker --version
             '''
         }
     }
@@ -88,6 +91,17 @@ stages {
         }
     }
 
+    stage('Push Docker Image') {
+        steps {
+            script {
+                docker.withRegistry('', registryCredential) {
+                    def image = docker.image("${IMAGE_NAME}:latest")
+                    image.push('latest')
+                }
+            }
+        }
+    }
+
     stage('Smoke Test') {
         steps {
             sh '''
@@ -96,7 +110,7 @@ stages {
             docker run -d \
               --name springboot-app \
               -p 8081:8081 \
-              springboot-demo:latest
+              ${IMAGE_NAME}:latest
 
             sleep 20
 
