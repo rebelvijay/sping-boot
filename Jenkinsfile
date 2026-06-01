@@ -14,8 +14,8 @@ stages {
     stage('Checkout') {
         steps {
             git branch: 'master',
-                credentialsId: 'GitLabCred',
-                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot'
+                credentialsId: 'GITLABCRED',
+                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
         }
     }
 
