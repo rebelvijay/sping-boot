@@ -56,7 +56,7 @@ stages {
 
     stage('SonarQube Analysis') {
         steps {
-            withSonarQubeEnv('mysonarqube') {
+            withSonarQubeEnv('sonarqube') {
                 sh '''
                 mvn sonar:sonar \
                 -Dsonar.projectName=springboot-demo \
