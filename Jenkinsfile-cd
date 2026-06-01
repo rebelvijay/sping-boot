@@ -1,0 +1,65 @@
+pipeline {
+agent { label 'build' }
+
+parameters {
+    string(
+        name: 'IMAGETAG',
+        defaultValue: 'latest',
+        description: 'Docker image tag to deploy'
+    )
+
+    choice(
+        name: 'environment',
+        choices: ['functional', 'integration', 'regression', 'uat', 'release'],
+        description: 'Select deployment environment'
+    )
+}
+
+stages {
+
+    stage('Checkout Deployment Repo') {
+        steps {
+            git branch: 'master',
+                credentialsId: 'GitLabCred',
+                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot-cd-pipeline.git'
+        }
+    }
+
+    stage('Update Kubernetes Manifest') {
+        steps {
+            dir("./${params.environment}") {
+
+                sh """
+                sed -i 's|image:.*|image: vijaykumarkotikilapudi/springboot-demo:${IMAGETAG}|g' deployment.yml
+                """
+
+                sh "cat deployment.yml"
+            }
+        }
+    }
+
+    stage('Commit and Push Changes') {
+        steps {
+            sh """
+            git config user.email "vijaykdevops1997@gmail.com"
+            git config user.name "vijaykdevops1997"
+
+            git add .
+            git commit -m "Deploy image tag ${IMAGETAG}" || true
+            git push origin master
+            """
+        }
+    }
+}
+
+post {
+    success {
+        echo "Deployment manifest updated successfully"
+    }
+
+    failure {
+        echo "Deployment manifest update failed"
+    }
+}
+
+}
