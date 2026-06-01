@@ -7,6 +7,18 @@ pipeline {
             defaultValue: 'latest',
             description: 'Docker image tag'
         )
+
+        string(
+            name: 'GIT_USER',
+            defaultValue: 'venkatarajukotikilapudi1963',
+            description: 'GitLab Username'
+        )
+
+        password(
+            name: 'GIT_PASS',
+            defaultValue: '',
+            description: 'GitLab Personal Access Token'
+        )
     }
 
     stages {
@@ -32,35 +44,32 @@ pipeline {
 
         stage('Commit and Push Changes') {
             steps {
+                sh '''
+                git config user.email "vijaykdevops1997@gmail.com"
+                git config user.name "vijaykdevops1997"
 
-                withCredentials([usernamePassword(
-                    credentialsId: 'GITLABCRED',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_PASS'
-                )]) {
+                git add .
+                git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
 
-                    sh '''
-                    git config user.email "vijaykdevops1997@gmail.com"
-                    git config user.name "vijaykdevops1997"
+                git remote set-url origin https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git
 
-                    git add .
-
-                    git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
-
-                    git push origin master
-                    '''
-                }
+                git push origin master
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "SUCCESS"
+            echo "SUCCESS: Deployment manifest updated"
         }
 
         failure {
-            echo "FAILED"
+            echo "FAILED: Pipeline execution failed"
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
