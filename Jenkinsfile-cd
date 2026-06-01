@@ -2,58 +2,57 @@ pipeline {
     agent { label 'build' }
 
     parameters {
-        string(
-            name: 'IMAGETAG',
-            defaultValue: '',
-            description: 'Docker image tag (use CI BUILD_NUMBER)'
-        )
+        string(name: 'IMAGE_TAG', description: 'Docker image tag from CI')
+    }
+
+    environment {
+        IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
+        GITOPS_REPO = "https://gitlab.com/venkatarajukotikilapudi/springboot-gitops.git"
     }
 
     stages {
 
-        stage('Validate Input') {
+        stage('Validate') {
             steps {
                 script {
-                    if (!params.IMAGETAG?.trim()) {
-                        error "IMAGETAG is required (use CI BUILD_NUMBER)"
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error "IMAGE_TAG is required"
                     }
-                    echo "Deploying image tag: ${IMAGETAG}"
                 }
             }
         }
 
-        stage('Checkout Repo') {
+        stage('Checkout GitOps Repo') {
             steps {
                 git branch: 'master',
                     credentialsId: 'GITLABCRED',
-                    url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
+                    url: "${GITOPS_REPO}"
             }
         }
 
-        stage('Update Kubernetes Manifest') {
+        stage('Update Manifest') {
             steps {
-                dir('kubernetes') {
-                    sh """
-                    sed -i 's|image:.*|image: vijaykumarkotikilapudi/springboot-demo:${IMAGETAG}|g' deployment.yml
-                    cat deployment.yml
-                    """
-                }
+                sh """
+                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yml
+                cat deployment.yml
+                """
             }
         }
 
-        stage('Commit and Push Changes') {
+        stage('Commit & Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'GITLABCRED', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                withCredentials([usernamePassword(credentialsId: 'GITLABCRED',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS')]) {
+
                     sh '''
-                    git config user.email "vijaykdevops1997@gmail.com"
-                    git config user.name "vijaykdevops1997"
+                    git config user.email "jenkins@ci.com"
+                    git config user.name "jenkins"
 
                     git add .
+                    git commit -m "Deploy ${IMAGE_TAG}" || true
 
-                    git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
-
-                    git remote set-url origin https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git
-                    git push origin master
+                    git push https://${USER}:${PASS}@gitlab.com/venkatarajukotikilapudi/springboot-gitops.git master
                     '''
                 }
             }
@@ -61,14 +60,6 @@ pipeline {
     }
 
     post {
-        success {
-            echo "SUCCESS: Deployed image tag ${IMAGETAG}"
-        }
-
-        failure {
-            echo "FAILED: Deployment pipeline failed"
-        }
-
         always {
             cleanWs()
         }
