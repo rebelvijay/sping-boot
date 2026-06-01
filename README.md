@@ -29,3 +29,12 @@ target/site/jacoco/index.html
 mvn clean package -DskipTests
 docker build -t springboot-demo .
 docker run -p 8081:8081 springboot-demo
+
+i donot nvd api key thats reason i didnot run thi stage 
+stage('Stage III: SCA') {
+      steps { 
+        echo "Running Software Composition Analysis using OWASP Dependency-Check ..."
+        sh "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64; mvn org.owasp:dependency-check-maven:check"
+      }
+    }
+if i want i will install owasp plugin in pom.xml and add this stage in jenkins file
