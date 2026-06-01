@@ -32,28 +32,24 @@ pipeline {
 
         stage('Clean Build') {
             steps {
-                echo "Compiling application..."
                 sh 'mvn clean compile'
             }
         }
 
         stage('Unit Test') {
             steps {
-                echo "Running JUnit tests..."
                 sh 'mvn test'
             }
         }
 
         stage('Code Coverage (JaCoCo)') {
             steps {
-                echo "Generating JaCoCo report..."
                 sh 'mvn jacoco:report'
             }
         }
 
         stage('Package Jar') {
             steps {
-                echo "Building executable JAR..."
                 sh 'mvn package -DskipTests'
             }
         }
@@ -94,14 +90,20 @@ pipeline {
 
         stage('Scan Image (Trivy)') {
             steps {
-                echo "Scanning Image for Vulnerabilities"
                 sh """
                 trivy image \
                 --scanners vuln \
                 --severity HIGH,CRITICAL \
-                --exit-code 0 \
-                ${IMAGE_NAME}:${BUILD_NUMBER} > trivyresults.txt
+                --format json \
+                -o trivyresults.json \
+                ${IMAGE_NAME}:${BUILD_NUMBER}
                 """
+            }
+        }
+
+        stage('Archive Vulnerability Report') {
+            steps {
+                archiveArtifacts artifacts: 'trivyresults.json', fingerprint: true
             }
         }
 
@@ -118,7 +120,7 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                sh """
+                sh '''
                 docker rm -f springboot-app || true
 
                 docker run -d \
@@ -132,7 +134,7 @@ pipeline {
 
                 docker stop springboot-app
                 docker rm -f springboot-app
-                """
+                '''
             }
         }
     }
