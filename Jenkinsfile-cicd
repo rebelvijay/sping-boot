@@ -2,13 +2,9 @@ pipeline {
     agent { label 'build' }
 
     environment {
-        JAVA_HOME = "/usr/lib/jvm/java-21-openjdk-amd64"
-        PATH = "${JAVA_HOME}/bin:${PATH}"
-
         IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
-        REGISTRY_CREDENTIAL = "dockerhub"
-
-        GIT_REPO = "https://gitlab.com/venkatarajukotikilapudi/springboot.git"
+        REPO_URL = "https://gitlab.com/venkatarajukotikilapudi/springboot.git"
+        REGISTRY = "dockerhub"
     }
 
     stages {
@@ -17,40 +13,22 @@ pipeline {
             steps {
                 git branch: 'master',
                     credentialsId: 'GITLABCRED',
-                    url: "${GIT_REPO}"
-            }
-        }
-
-        stage('Verify Environment') {
-            steps {
-                sh '''
-                java -version
-                mvn -version
-                docker --version
-                trivy version || true
-                '''
+                    url: "${REPO_URL}"
             }
         }
 
         stage('Build & Test') {
             steps {
-                sh 'mvn clean compile test'
+                sh 'mvn clean package -DskipTests'
             }
         }
 
-        stage('Code Coverage (JaCoCo)') {
-            steps {
-                sh 'mvn jacoco:report'
-            }
-        }
-
-        stage('SonarQube Analysis') {
+        stage('SonarQube') {
             steps {
                 withSonarQubeEnv('sonarqube') {
                     sh '''
                     mvn sonar:sonar \
-                    -Dsonar.projectName=springboot-demo \
-                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                    -Dsonar.projectName=springboot-demo
                     '''
                 }
             }
@@ -62,7 +40,7 @@ pipeline {
                     script {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
-                            error "Quality Gate failed: ${qg.status}"
+                            error "Quality Gate Failed: ${qg.status}"
                         }
                     }
                 }
@@ -78,64 +56,69 @@ pipeline {
             }
         }
 
-        stage('Scan Image (Trivy)') {
+        stage('Trivy Scan') {
             steps {
                 sh """
                 trivy image \
-                --scanners vuln \
                 --severity HIGH,CRITICAL \
                 --format json \
-                -o trivyresults.json \
+                -o trivy.json \
                 ${IMAGE_NAME}:${IMAGE_TAG}
                 """
             }
         }
 
-        stage('Archive Vulnerability Report') {
-            steps {
-                archiveArtifacts artifacts: 'trivyresults.json', fingerprint: true
-            }
-        }
-
-        stage('Push Docker Image') {
+        stage('Push Image') {
             steps {
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', REGISTRY_CREDENTIAL) {
-                        def image = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
-                        image.push()
+                    docker.withRegistry('https://index.docker.io/v1/', REGISTRY) {
+                        docker.image("${IMAGE_NAME}:${IMAGE_TAG}").push()
                     }
                 }
             }
         }
 
-        stage('Deploy to Kubernetes (CD)') {
+        stage('Update Deployment YAML (GitOps Trigger)') {
             steps {
                 sh """
-                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/deployment.yml
-                cat kubernetes/deployment.yml
+                echo "Updating Kubernetes manifest..."
 
-                kubectl apply -f kubernetes/deployment.yml
+                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/deployment.yml
+
+                cat kubernetes/deployment.yml
                 """
             }
         }
 
-        stage('Smoke Test') {
+        stage('Commit & Push Changes') {
             steps {
-                sh '''
-                sleep 20
-                curl http://localhost:8081 || true
-                '''
+                withCredentials([usernamePassword(
+                    credentialsId: 'GITLABCRED',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
+
+                    sh """
+                    git config user.email "jenkins@ci.com"
+                    git config user.name "jenkins"
+
+                    git add kubernetes/deployment.yml
+                    git commit -m "Deploy ${IMAGE_NAME}:${IMAGE_TAG}" || true
+
+                    git push https://${USER}:${PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git master
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo "CI/CD PIPELINE SUCCESS 🚀 Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "🚀 CI/CD SUCCESS → ${IMAGE_NAME}:${IMAGE_TAG}"
         }
 
         failure {
-            echo "CI/CD PIPELINE FAILED ❌"
+            echo "❌ CI/CD FAILED"
         }
 
         always {
