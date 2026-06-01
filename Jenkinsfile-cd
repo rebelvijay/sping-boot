@@ -20,7 +20,7 @@ stages {
     stage('Checkout Deployment Repo') {
         steps {
             git branch: 'master',
-                credentialsId: 'GitLabCred',
+                credentialsId: 'GITLABCRED',
                 url: 'https://gitlab.com/venkatarajukotikilapudi/springboot-cd-pipeline.git'
         }
     }
