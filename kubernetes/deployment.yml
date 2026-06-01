@@ -1,21 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: wezvatechdemo
+  name: springboot-demo
   labels:
-    app: wezvatechdemo
+    app: springboot-demo
+
 spec:
   replicas: 2
+
   selector:
     matchLabels:
-      app: wezvatechdemo
+      app: springboot-demo
+
   template:
     metadata:
       labels:
-        app: wezvatechdemo
+        app: springboot-demo
+
     spec:
       containers:
-      - name: wezvatechdemo
-        image: adamtravis/wezvatechbackend:9
+      - name: springboot-demo
+        image: vijaykumarkotikilapudi/springboot-demo:latest
+        imagePullPolicy: Always
+
         ports:
-        - containerPort: 8080
+        - containerPort: 8081
