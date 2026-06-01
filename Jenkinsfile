@@ -15,7 +15,7 @@ stages {
         steps {
             git branch: 'master',
                 credentialsId: 'GitLabCred',
-                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
+                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot'
         }
     }
 
