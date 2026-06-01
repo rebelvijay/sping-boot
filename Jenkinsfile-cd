@@ -4,12 +4,23 @@ pipeline {
     parameters {
         string(
             name: 'IMAGETAG',
-            defaultValue: 'latest',
-            description: 'Docker image tag'
+            defaultValue: '',
+            description: 'Docker image tag (use CI BUILD_NUMBER)'
         )
     }
 
     stages {
+
+        stage('Validate Input') {
+            steps {
+                script {
+                    if (!params.IMAGETAG?.trim()) {
+                        error "IMAGETAG is required (use CI BUILD_NUMBER)"
+                    }
+                    echo "Deploying image tag: ${IMAGETAG}"
+                }
+            }
+        }
 
         stage('Checkout Repo') {
             steps {
@@ -38,6 +49,7 @@ pipeline {
                     git config user.name "vijaykdevops1997"
 
                     git add .
+
                     git diff --cached --quiet || git commit -m "Deploy image tag ${IMAGETAG}"
 
                     git remote set-url origin https://${GIT_USER}:${GIT_PASS}@gitlab.com/venkatarajukotikilapudi/springboot.git
@@ -50,11 +62,11 @@ pipeline {
 
     post {
         success {
-            echo "SUCCESS: Deployment manifest updated"
+            echo "SUCCESS: Deployed image tag ${IMAGETAG}"
         }
 
         failure {
-            echo "FAILED: Pipeline execution failed"
+            echo "FAILED: Deployment pipeline failed"
         }
 
         always {
