@@ -25,7 +25,6 @@
     </properties>
 
     <dependencies>
-
         <!-- WEB -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -38,12 +37,13 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
-        <plugins>
+        <!-- ✅ This ensures the JAR is always named springboot-demo.jar -->
+        <finalName>springboot-demo</finalName>
 
+        <plugins>
             <!-- Spring Boot -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -62,7 +62,6 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
-
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -70,7 +69,6 @@
                             <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-
                     <execution>
                         <id>report</id>
                         <phase>test</phase>
@@ -80,7 +78,6 @@
                     </execution>
                 </executions>
             </plugin>
-
         </plugins>
     </build>
 
