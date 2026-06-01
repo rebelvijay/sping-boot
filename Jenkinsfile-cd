@@ -2,64 +2,91 @@ pipeline {
     agent { label 'build' }
 
     parameters {
-        string(name: 'IMAGE_TAG', description: 'Docker image tag from CI')
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Docker image tag from CI (example: 35)'
+        )
     }
 
     environment {
         IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
         GITOPS_REPO = "https://gitlab.com/venkatarajukotikilapudi/springboot-gitops.git"
+        GITOPS_BRANCH = "master"
     }
 
     stages {
 
-        stage('Validate') {
+        stage('Validate Input') {
             steps {
                 script {
                     if (!params.IMAGE_TAG?.trim()) {
-                        error "IMAGE_TAG is required"
+                        error "❌ IMAGE_TAG is required (pass CI BUILD_NUMBER)"
                     }
+                    echo "🚀 Deploying image: ${IMAGE_NAME}:${params.IMAGE_TAG}"
                 }
             }
         }
 
         stage('Checkout GitOps Repo') {
             steps {
-                git branch: 'master',
+                git branch: "${GITOPS_BRANCH}",
                     credentialsId: 'GITLABCRED',
                     url: "${GITOPS_REPO}"
             }
         }
 
-        stage('Update Manifest') {
+        stage('Update Kubernetes Manifest') {
             steps {
                 sh """
-                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yml
-                cat deployment.yml
+                echo "Updating deployment image..."
+
+                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' kubernetes/deployment.yml
+
+                echo "Updated deployment.yml:"
+                cat kubernetes/deployment.yml
                 """
             }
         }
 
-        stage('Commit & Push') {
+        stage('Commit Changes') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'GITLABCRED',
+                sh """
+                git config user.email "jenkins@ci-cd.com"
+                git config user.name "jenkins"
+
+                git add kubernetes/deployment.yml
+
+                git commit -m "🚀 Deploy image ${IMAGE_TAG}" || echo "No changes to commit"
+                """
+            }
+        }
+
+        stage('Push to GitOps Repo') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'GITLABCRED',
                     usernameVariable: 'USER',
-                    passwordVariable: 'PASS')]) {
+                    passwordVariable: 'PASS'
+                )]) {
 
-                    sh '''
-                    git config user.email "jenkins@ci.com"
-                    git config user.name "jenkins"
-
-                    git add .
-                    git commit -m "Deploy ${IMAGE_TAG}" || true
-
-                    git push https://${USER}:${PASS}@gitlab.com/venkatarajukotikilapudi/springboot-gitops.git master
-                    '''
+                    sh """
+                    git push https://${USER}:${PASS}@gitlab.com/venkatarajukotikilapudi/springboot-gitops.git ${GITOPS_BRANCH}
+                    """
                 }
             }
         }
     }
 
     post {
+        success {
+            echo "✅ CD SUCCESS: Deployed image ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+
+        failure {
+            echo "❌ CD FAILED"
+        }
+
         always {
             cleanWs()
         }
