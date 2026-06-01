@@ -21,7 +21,7 @@ stages {
         steps {
             git branch: 'master',
                 credentialsId: 'GITLABCRED',
-                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot-cd-pipeline.git'
+                url: 'https://gitlab.com/venkatarajukotikilapudi/springboot.git'
         }
     }
 
