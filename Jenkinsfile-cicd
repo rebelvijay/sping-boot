@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "vijaykumarkotikilapudi/springboot-demo"
-        REPO_URL = "https://gitlab.com/venkatarajukotikilapudi/springboot.git"
+        REPO_URL = "https://github.com/rebelvijay/sping-boot.git"
         REGISTRY = "dockerhub"
     }
 
