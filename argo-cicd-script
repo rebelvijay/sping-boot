@@ -1,0 +1,89 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "docker6784/sping-boot"
+        REPO_URL = "https://github.com/rebelvijay/sping-boot.git"
+        DOCKER_CREDS = "dockerhub"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout Source') {
+            steps {
+                git branch: 'master',
+                    credentialsId: 'GITLABCRED',   // keep using this
+                    url: "${REPO_URL}"
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                docker build \
+                -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                -t ${IMAGE_NAME}:latest .
+                """
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDS) {
+                        docker.image("${IMAGE_NAME}:${IMAGE_TAG}").push()
+                        docker.image("${IMAGE_NAME}:latest").push()
+                    }
+                }
+            }
+        }
+
+        stage('Update Kubernetes Manifest') {
+            steps {
+                sh """
+                sed -i 's#image:.*#image: ${IMAGE_NAME}:${IMAGE_TAG}#g' kubernetes/deployment.yml
+                cat kubernetes/deployment.yml
+                """
+            }
+        }
+
+        stage('Commit and Push Manifest') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'GITLABCRED', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                    sh """
+                    git config user.email "vijaykishore684@gmail.com"
+                    git config user.name "vijay"
+
+                    git remote set-url origin https://${GIT_USER}:${GIT_PASS}@github.com/rebelvijay/sping-boot.git
+
+                    git add kubernetes/deployment.yml
+                    git commit -m "Update image to ${IMAGE_TAG}" || true
+                    git push origin HEAD:master
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Image pushed: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "ArgoCD will sync and deploy automatically to GKE"
+        }
+
+        failure {
+            echo "Pipeline Failed"
+        }
+
+        always {
+            cleanWs()
+        }
+    }
+}
