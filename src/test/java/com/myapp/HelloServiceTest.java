@@ -10,6 +10,6 @@ class HelloServiceTest {
     @Test
     void testMessage() {
         HelloService service = new HelloService();
-        assertEquals("Hello kotikilapudi", service.getMessage());
+        assertEquals("Hello Nuka vijay", service.getMessage());
     }
 }
