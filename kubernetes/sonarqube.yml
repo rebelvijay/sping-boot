@@ -1,33 +1,27 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-name: sonarqube
-namespace: argocd
+  name: sonarqube
+  namespace: argocd
 
 spec:
-project: default
+  project: default
 
-source:
-repoURL: https://SonarSource.github.io/helm-chart-sonarqube
-chart: sonarqube
-targetRevision: "*"
+  source:
+    repoURL: https://SonarSource.github.io/helm-chart-sonarqube
+    chart: sonarqube
+    targetRevision: "*"
+    helm:
+      values: |
+        monitoringPasscode: "sonar123"
 
-```
-helm:
-  values: |
-    monitoringPasscode: "sonar123"
-```
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sonar
 
-destination:
-server: https://kubernetes.default.svc
-namespace: sonar
-
-syncPolicy:
-automated:
-prune: true
-selfHeal: true
-
-```
-syncOptions:
-  - CreateNamespace=true
-```
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
