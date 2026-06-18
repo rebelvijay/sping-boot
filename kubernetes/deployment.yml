@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: springboot-demo
-        image: docker6784/sping-boot:15
+        image: docker6784/sping-boot:8
         imagePullPolicy: Always
 
         ports:
